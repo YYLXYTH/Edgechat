@@ -61,20 +61,26 @@ echo ☁️  Ensuring Cloudflare resources...
 node .github/scripts/ensure-cloudflare-resources.mjs > "%TEMP%\cf-resources-output.txt"
 type "%TEMP%\cf-resources-output.txt"
 
-REM Parse outputs from the script
-for /f "tokens=*" %%a in ('findstr "[output] d1_database_name=" "%TEMP%\cf-resources-output.txt"') do (
-    for /f "tokens=2 delims==" %%b in ("%%a") do set "d1_database_name=%%b"
-)
-for /f "tokens=*" %%a in ('findstr "[output] d1_database_id=" "%TEMP%\cf-resources-output.txt"') do (
-    for /f "tokens=2 delims==" %%b in ("%%a") do set "d1_database_id=%%b"
-)
-for /f "tokens=*" %%a in ('findstr "[output] d1_created=" "%TEMP%\cf-resources-output.txt"') do (
-    for /f "tokens=2 delims==" %%b in ("%%a") do set "d1_created=%%b"
-)
-for /f "tokens=*" %%a in ('findstr "[output] kv_namespace_id=" "%TEMP%\cf-resources-output.txt"') do (
-    for /f "tokens=2 delims==" %%b in ("%%a") do set "kv_namespace_id=%%b"
+REM Parse outputs from the script using PowerShell for reliable parsing
+for /f "delims=" %%a in ('powershell -Command "(Get-Content '%TEMP%\cf-resources-output.txt' | Where-Object { $_ -match '\[output\] d1_database_name=' }) -replace '.*d1_database_name=','"') do set "d1_database_name=%%a"
+for /f "delims=" %%a in ('powershell -Command "(Get-Content '%TEMP%\cf-resources-output.txt' | Where-Object { $_ -match '\[output\] d1_database_id=' }) -replace '.*d1_database_id=','"') do set "d1_database_id=%%a"
+for /f "delims=" %%a in ('powershell -Command "(Get-Content '%TEMP%\cf-resources-output.txt' | Where-Object { $_ -match '\[output\] d1_created=' }) -replace '.*d1_created=','"') do set "d1_created=%%a"
+for /f "delims=" %%a in ('powershell -Command "(Get-Content '%TEMP%\cf-resources-output.txt' | Where-Object { $_ -match '\[output\] kv_namespace_id=' }) -replace '.*kv_namespace_id=','"') do set "kv_namespace_id=%%a"
+
+if "%d1_database_id%"=="" (
+    echo ❌ Error: Could not parse D1 Database ID from ensure-resources output
+    del "%TEMP%\cf-resources-output.txt"
+    exit /b 1
 )
 
+if "%kv_namespace_id%"=="" (
+    echo ❌ Error: Could not parse KV Namespace ID from ensure-resources output
+    del "%TEMP%\cf-resources-output.txt"
+    exit /b 1
+)
+
+echo Found D1 Database ID: %d1_database_id%
+echo Found KV Namespace ID: %kv_namespace_id%
 echo.
 
 REM Step 4: Generate wrangler config
