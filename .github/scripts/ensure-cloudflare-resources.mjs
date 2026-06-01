@@ -231,7 +231,6 @@ async function main() {
 
   const d1 = await ensureD1Database();
   const kv = await ensureKvNamespace();
-  const r2 = await ensureR2Bucket();
 
   setOutput("d1_database_name", d1DatabaseName);
   setOutput("d1_database_id", d1.id);
@@ -239,8 +238,6 @@ async function main() {
   setOutput("kv_namespace_title", kvNamespaceTitle);
   setOutput("kv_namespace_id", kv.id);
   setOutput("kv_created", kv.created);
-  setOutput("r2_bucket_name", r2BucketName);
-  setOutput("r2_created", r2.created);
 }
 
 main().catch((error) => {

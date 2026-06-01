@@ -38,7 +38,7 @@ echo "🔨 Building frontend assets..."
 npm run build:frontend
 echo ""
 
-# Step 3: Ensure Cloudflare resources (D1, KV, R2)
+# Step 3: Ensure Cloudflare resources (D1, KV)
 echo "☁️  Ensuring Cloudflare resources..."
 node .github/scripts/ensure-cloudflare-resources.mjs > /tmp/cf-resources-output.txt
 cat /tmp/cf-resources-output.txt

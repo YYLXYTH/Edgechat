@@ -75,79 +75,10 @@ function validateUpload(env, file) {
 
 export function registerUploadRoutes(app) {
   app.post('/api/upload', async (c) => {
-    const session = c.get('session');
-    const formData = await c.req.formData();
-    const file = formData.get('file');
-    if (!(file instanceof File)) {
-      return errorResponse('请选择文件');
-    }
-
-    try {
-      validateUpload(c.env, file);
-    } catch (error) {
-      return errorResponse(error.message);
-    }
-
-    const extension = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.')) : '';
-    const key = `${session.userId}/${Date.now()}-${crypto.randomUUID()}${extension}`;
-    await c.env.FILES.put(key, await file.arrayBuffer(), {
-      httpMetadata: {
-        contentType: normalizeContentType(file.type) || 'application/octet-stream',
-        cacheControl: FILE_BROWSER_CACHE_CONTROL
-      },
-      customMetadata: {
-        filename: sanitizeFilename(file.name)
-      }
-    });
-
-    return c.json({
-      file: {
-        key,
-        name: file.name,
-        type: file.type || 'application/octet-stream',
-        size: file.size,
-        url: `/files/${encodeURIComponent(key)}`
-      }
-    });
+    return errorResponse('文件上传功能已禁用（R2 存储已移除）');
   });
 
   app.get('/files/:key{.+}', async (c) => {
-    const key = decodeURIComponent(c.req.param('key'));
-    const object = await c.env.FILES.get(key);
-    if (!object) {
-      return new Response('Not Found', { status: 404 });
-    }
-
-    const headers = new Headers();
-    object.writeHttpMetadata(headers);
-    headers.set('etag', object.httpEtag);
-    headers.set('cache-control', headers.get('cache-control') || FILE_BROWSER_CACHE_CONTROL);
-    if (object.uploaded) {
-      headers.set('last-modified', object.uploaded.toUTCString());
-    }
-
-    headers.set('x-content-type-options', 'nosniff');
-    headers.set('referrer-policy', 'no-referrer');
-    headers.set(
-      'content-security-policy',
-      "sandbox; default-src 'none'; base-uri 'none'; form-action 'none'"
-    );
-
-    const contentType = normalizeContentType(headers.get('content-type'));
-    const inlineAllowed = isInlineContentType(contentType);
-    const dispositionKind =
-      inlineAllowed && !contentType.startsWith('text/') ? 'inline' : 'attachment';
-    const filename = object.customMetadata?.filename || key.split('/').pop() || 'file';
-    headers.set('content-disposition', contentDispositionValue(dispositionKind, filename));
-
-    const ifNoneMatch = c.req.header('if-none-match');
-    if (ifNoneMatch && ifNoneMatch === object.httpEtag) {
-      return new Response(null, {
-        status: 304,
-        headers
-      });
-    }
-
-    return new Response(object.body, { headers });
+    return new Response('文件下载功能已禁用（R2 存储已移除）', { status: 404 });
   });
 }

@@ -26,8 +26,7 @@ EdgeChat 是一个部署在 Cloudflare 上的聊天系统，提供账号体系�
 - 实时层：Durable Objects WebSocket Hibernation
 - 数据库：Cloudflare D1
 - 会话：Cloudflare KV
-- 文件：Cloudflare R2
-- 部署：Wrangler、GitHub Actions、本地一键部署脚本
+- 部署：Wrangler、本地一键部署脚本（支持 Bash/Batch）
 
 ## 部署
 
@@ -38,10 +37,42 @@ EdgeChat 是一个部署在 Cloudflare 上的聊天系统，提供账号体系�
 **前提条件：**
 - Node.js 20+
 - npm
-- Cloudflare API Token（需有 Workers、D1、KV、R2 权限）
+- Cloudflare API Token（需有 Workers、D1、KV 权限）
 - Cloudflare Account ID
 
 **部署步骤：**
+
+#### Windows (使用 Batch 脚本)
+
+1. 设置环境变量：
+
+```cmd
+set CLOUDFLARE_API_TOKEN=your_api_token
+set CLOUDFLARE_ACCOUNT_ID=your_account_id
+
+REM 可选：创建管理员账号
+set EDGECHAT_ADMIN_USERNAME=admin
+set EDGECHAT_ADMIN_PASSWORD=your_password
+set EDGECHAT_ADMIN_DISPLAY_NAME=Administrator
+```
+
+或者使用 PowerShell：
+
+```powershell
+$env:CLOUDFLARE_API_TOKEN='your_api_token'
+$env:CLOUDFLARE_ACCOUNT_ID='your_account_id'
+$env:EDGECHAT_ADMIN_USERNAME='admin'
+$env:EDGECHAT_ADMIN_PASSWORD='your_password'
+$env:EDGECHAT_ADMIN_DISPLAY_NAME='Administrator'
+```
+
+2. 运行部署脚本：
+
+```cmd
+deploy.bat
+```
+
+#### Linux / macOS (使用 Bash 脚本)
 
 1. 设置环境变量：
 
@@ -64,7 +95,7 @@ export EDGECHAT_ADMIN_DISPLAY_NAME='Administrator'
 脚本会自动完成以下操作：
 - 安装依赖
 - 构建前端资源
-- 创建 D1 数据库、KV 命名空间、R2 存储桶
+- 创建 D1 数据库、KV 命名空间
 - 初始化数据库 schema
 - 创建管理员用户（如设置了相关环境变量）
 - 部署 Worker
