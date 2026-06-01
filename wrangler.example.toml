@@ -10,7 +10,6 @@ MESSAGE_RETENTION_DAYS = "7"
 SOFT_DELETE_RETENTION_DAYS = "60"
 GC_BATCH_SIZE = "500"
 GC_MAX_BATCHES_PER_RUN = "20"
-R2_DELETE_MAX_RETRY = "8"
 ALLOWED_FILE_TYPES = "image/,video/,application/pdf,text/"
 MAX_FILE_SIZE = "20971520"
 
@@ -23,11 +22,6 @@ database_id = "YOUR_D1_DATABASE_ID_HERE"
 [[kv_namespaces]]
 binding = "SESSIONS"
 id = "YOUR_KV_NAMESPACE_ID_HERE"
-
-[[r2_buckets]]
-binding = "FILES"
-# Legacy R2 bucket name kept intentionally; code/docs use Edgechat branding.
-bucket_name = "cfchat-files"
 
 [[durable_objects.bindings]]
 name = "CHANNEL_ROOM"
@@ -44,7 +38,7 @@ new_sqlite_classes = ["ChannelRoom", "Scheduler"]
 [assets]
 directory = "./frontend/dist"
 not_found_handling = "single-page-application"
-run_worker_first = ["/api/*", "/files/*"]
+run_worker_first = ["/api/*"]
 
 [triggers]
 # Cloudflare Cron 按 UTC 执行；19:00 UTC = 北京时间每天 03:00

@@ -2,7 +2,6 @@ const DEFAULT_MESSAGE_RETENTION_DAYS = 7;
 const DEFAULT_SOFT_DELETE_RETENTION_DAYS = 60;
 const DEFAULT_BATCH_SIZE = 500;
 const DEFAULT_MAX_BATCHES_PER_RUN = 20;
-const DEFAULT_R2_DELETE_MAX_RETRY = 8;
 const MAX_ERROR_LENGTH = 500;
 
 function toPositiveInteger(value, fallback) {
@@ -27,10 +26,6 @@ function getGcConfig(env) {
     maxBatchesPerRun: toPositiveInteger(
       env.GC_MAX_BATCHES_PER_RUN,
       DEFAULT_MAX_BATCHES_PER_RUN
-    ),
-    r2DeleteMaxRetry: toPositiveInteger(
-      env.R2_DELETE_MAX_RETRY,
-      DEFAULT_R2_DELETE_MAX_RETRY
     )
   };
 }
@@ -53,10 +48,6 @@ function uniqueKeys(keys) {
 
 function createSummary() {
   return {
-    retryQueueFetched: 0,
-    retryQueueDeleted: 0,
-    retryQueueFailed: 0,
-    retryQueueSkippedReferenced: 0,
     expiredMessagesDeleted: 0,
     invitesDeleted: 0,
     channelsDeleted: 0,
@@ -64,219 +55,20 @@ function createSummary() {
     channelMessagesDeleted: 0,
     usersDeleted: 0,
     userMessagesDeleted: 0,
-    userMembershipsDeleted: 0,
-    r2Deleted: 0,
-    r2DeleteFailed: 0,
-    r2DeleteQueued: 0,
-    r2SkippedReferenced: 0
+    userMembershipsDeleted: 0
   };
 }
 
 async function ensureGcSchema(db) {
-  await db.batch([
-    db.prepare(
-      `CREATE TABLE IF NOT EXISTS pending_r2_delete (
-         object_key TEXT PRIMARY KEY,
-         retry_count INTEGER NOT NULL DEFAULT 0,
-         next_retry_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-         last_error TEXT NOT NULL DEFAULT '',
-         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-       )`
-    ),
-    db.prepare(
-      `CREATE INDEX IF NOT EXISTS idx_pending_r2_delete_next_retry
-       ON pending_r2_delete(next_retry_at, retry_count)`
-    )
-  ]);
-}
-
-async function isR2KeyReferenced(db, key) {
-  const { results } = await db
-    .prepare(
-      `SELECT 1 AS found
-       FROM (
-         SELECT attachment_key AS object_key
-         FROM messages
-         WHERE attachment_key = ?
-         UNION ALL
-         SELECT avatar_key AS object_key
-         FROM users
-         WHERE avatar_key = ?
-         UNION ALL
-         SELECT avatar_key AS object_key
-         FROM channels
-         WHERE avatar_key = ?
-       ) refs
-       LIMIT 1`
-    )
-    .bind(key, key, key)
-    .all();
-  return Boolean(results[0]);
-}
-
-async function queueR2DeleteFailure(db, key, errorMessage) {
-  await db
-    .prepare(
-      `INSERT INTO pending_r2_delete (
-         object_key,
-         retry_count,
-         next_retry_at,
-         last_error,
-         created_at,
-         updated_at
-       )
-       VALUES (?, 0, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-       ON CONFLICT(object_key) DO UPDATE
-       SET next_retry_at = CURRENT_TIMESTAMP,
-           last_error = excluded.last_error,
-           updated_at = CURRENT_TIMESTAMP`
-    )
-    .bind(key, errorMessage)
-    .run();
-}
-
-async function removePendingR2Delete(db, key) {
-  await db
-    .prepare(
-      `DELETE FROM pending_r2_delete
-       WHERE object_key = ?`
-    )
-    .bind(key)
-    .run();
-}
-
-function retryDelayMinutes(nextRetryCount, retryExponentCap) {
-  const exponent = Math.min(Math.max(nextRetryCount, 1), retryExponentCap);
-  const delay = 2 ** exponent;
-  return Math.min(delay, 24 * 60);
-}
-
-async function markR2RetryFailure(db, key, retryCount, delayMinutes, errorMessage) {
-  await db
-    .prepare(
-      `UPDATE pending_r2_delete
-       SET retry_count = ?,
-           next_retry_at = datetime('now', ?),
-           last_error = ?,
-           updated_at = CURRENT_TIMESTAMP
-       WHERE object_key = ?`
-    )
-    .bind(retryCount, `+${delayMinutes} minutes`, errorMessage, key)
-    .run();
-}
-
-async function deleteRowsByIds(db, tableName, columnName, ids, extraSql = '') {
-  if (!ids.length) {
-    return 0;
-  }
-
-  const { meta } = await db
-    .prepare(
-      `DELETE FROM ${tableName}
-       WHERE ${columnName} IN (${placeholders(ids.length)})${extraSql}`
-    )
-    .bind(...ids)
-    .run();
-  return Number(meta?.changes || 0);
-}
-
-async function collectMessageAttachmentsByColumn(db, columnName, ids) {
-  if (!ids.length) {
-    return [];
-  }
-
-  const { results } = await db
-    .prepare(
-      `SELECT attachment_key
-       FROM messages
-       WHERE ${columnName} IN (${placeholders(ids.length)})
-         AND attachment_key IS NOT NULL
-         AND attachment_key != ''`
-    )
-    .bind(...ids)
-    .all();
-
-  return uniqueKeys(results.map((row) => row.attachment_key));
+  // R2-related schema removed along with R2 storage
 }
 
 async function processR2CandidateKeys(env, db, keys, summary) {
+  // R2 operations removed - files are no longer stored
   const unique = uniqueKeys(keys);
   for (const key of unique) {
-    if (await isR2KeyReferenced(db, key)) {
-      summary.r2SkippedReferenced += 1;
-      continue;
-    }
-
-    try {
-      await env.FILES.delete(key);
-      summary.r2Deleted += 1;
-    } catch (error) {
-      summary.r2DeleteFailed += 1;
-      summary.r2DeleteQueued += 1;
-      await queueR2DeleteFailure(db, key, safeErrorMessage(error));
-    }
-  }
-}
-
-async function runRetryQueueStep(env, config, summary) {
-  let batches = 0;
-
-  while (batches < config.maxBatchesPerRun) {
-    const { results } = await env.DB.prepare(
-      `SELECT object_key, retry_count
-       FROM pending_r2_delete
-       WHERE next_retry_at <= CURRENT_TIMESTAMP
-       ORDER BY next_retry_at ASC
-       LIMIT ?`
-    )
-      .bind(config.batchSize)
-      .all();
-
-    if (!results.length) {
-      break;
-    }
-
-    batches += 1;
-    summary.retryQueueFetched += results.length;
-
-    for (const row of results) {
-      const key = String(row.object_key || '');
-      if (!key) {
-        await removePendingR2Delete(env.DB, key);
-        summary.retryQueueDeleted += 1;
-        continue;
-      }
-
-      if (await isR2KeyReferenced(env.DB, key)) {
-        await removePendingR2Delete(env.DB, key);
-        summary.retryQueueSkippedReferenced += 1;
-        continue;
-      }
-
-      try {
-        await env.FILES.delete(key);
-        await removePendingR2Delete(env.DB, key);
-        summary.retryQueueDeleted += 1;
-        summary.r2Deleted += 1;
-      } catch (error) {
-        const currentRetry = Number(row.retry_count || 0);
-        const nextRetry = currentRetry + 1;
-        const delayMinutes = retryDelayMinutes(nextRetry, config.r2DeleteMaxRetry);
-        await markR2RetryFailure(
-          env.DB,
-          key,
-          nextRetry,
-          delayMinutes,
-          safeErrorMessage(error)
-        );
-        summary.retryQueueFailed += 1;
-      }
-    }
-
-    if (results.length < config.batchSize) {
-      break;
-    }
+    // Skip all R2 operations
+    summary.r2SkippedReferenced = (summary.r2SkippedReferenced || 0) + 1;
   }
 }
 
@@ -502,7 +294,7 @@ export async function runScheduledGc(env) {
   const summary = createSummary();
   await ensureGcSchema(env.DB);
 
-  await runRetryQueueStep(env, config, summary);
+  // R2 retry queue step removed along with R2 storage
   await runExpiredMessagesStep(env, config, summary);
   await runHardDeleteInvitesStep(env, config, summary);
   await runHardDeleteChannelsStep(env, config, summary);
