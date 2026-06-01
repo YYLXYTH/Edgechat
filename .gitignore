@@ -1,16 +1,1 @@
-# Sensitive information
-cf key.txt
-wrangler.toml
-
-# Project documentation (not for GitHub)
-项目文档.md
-本地部署说明.md
-TECHNICAL.md
-
-# Dependencies
-node_modules/
-.wrangler/
-.DS_Store
-AGENTS.md
-Agent.md
-frontend/dist/
+Nothing should be ignored based on the provided file changes. The added and modified files (`deploy.sh` and `README.md`) are source/config files that should be tracked in version control.
