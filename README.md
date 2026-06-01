@@ -27,22 +27,60 @@ EdgeChat 是一个部署在 Cloudflare 上的聊天系统，提供账号体系�
 - 数据库：Cloudflare D1
 - 会话：Cloudflare KV
 - 文件：Cloudflare R2
-- 部署：Wrangler、GitHub Actions
+- 部署：Wrangler、GitHub Actions、本地一键部署脚本
 
 ## 部署
 
-### GitHub Actions 自动部署
+### 方式一：本地一键部署（推荐）
 
-推荐优先使用 GitHub Actions 部署，适合长期维护和生产环境更新。
+适合快速部署到 Cloudflare，无需配置 GitHub Actions。
+
+**前提条件：**
+- Node.js 20+
+- npm
+- Cloudflare API Token（需有 Workers、D1、KV、R2 权限）
+- Cloudflare Account ID
+
+**部署步骤：**
+
+1. 设置环境变量：
+
+```bash
+export CLOUDFLARE_API_TOKEN='your_api_token'
+export CLOUDFLARE_ACCOUNT_ID='your_account_id'
+
+# 可选：创建管理员账号
+export EDGECHAT_ADMIN_USERNAME='admin'
+export EDGECHAT_ADMIN_PASSWORD='your_password'
+export EDGECHAT_ADMIN_DISPLAY_NAME='Administrator'
+```
+
+2. 运行部署脚本：
+
+```bash
+./deploy.sh
+```
+
+脚本会自动完成以下操作：
+- 安装依赖
+- 构建前端资源
+- 创建 D1 数据库、KV 命名空间、R2 存储桶
+- 初始化数据库 schema
+- 创建管理员用户（如设置了相关环境变量）
+- 部署 Worker
+
+### 方式二：GitHub Actions 自动部署
+
+适合长期维护和生产环境更新，推送到 `master` 或 `main` 分支后自动部署。
 
 - 快速开始：<https://doc.chsm666.top/guide/getting-started.html>
 - 详细教程：<https://doc.chsm666.top/guide/actions-deploy.html>
 
 仓库内已提供 `.github/workflows/deploy-worker.yml`，推送到 `master` 或 `main`，或手动触发 `workflow_dispatch` 后即可执行自动部署。
 
-### 手动部署
+### 方式三：手动部署
 
-如果你希望本地手动部署，完整步骤、资源准备和注意事项请查看文档站教程：
+如果你希望完全手动控制部署流程，请查看文档站教程：
 
 - 手动部署教程：<https://doc.chsm666.top/guide/getting-started.html>
 - 文档首页：<https://doc.chsm666.top/>
